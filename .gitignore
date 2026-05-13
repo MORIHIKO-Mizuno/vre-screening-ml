@@ -1,0 +1,22 @@
+# data
+data/raw/
+data/processed/
+
+# results
+results/
+
+# python
+__pycache__/
+*.pyc
+.venv/
+.env
+
+# model files
+*.pkl
+*.joblib
+
+# OS
+.DS_Store
+
+# notebook checkpoints
+.ipynb_checkpoints/
