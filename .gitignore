@@ -20,3 +20,6 @@ __pycache__/
 
 # notebook checkpoints
 .ipynb_checkpoints/
+
+# notebook
+notebooks/catboost_info/

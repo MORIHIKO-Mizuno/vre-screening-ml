@@ -474,6 +474,7 @@ def plot_roc_curve_cv(
     plt.tight_layout()
     if plt_show:
         plt.show()
+    plt.close(fig_roc)
 
     # ── PR プロット ──────────────────────────────────────────
     fig_pr, ax_pr = plt.subplots(figsize=(12, 12))
@@ -505,7 +506,8 @@ def plot_roc_curve_cv(
     plt.tight_layout()
     if plt_show:
         plt.show()
-
+    plt.close(fig_pr)
+    
     # ── DCA プロット ─────────────────────────────────────────
     def _plot_dca(xlim=None, ylim=None, zoom=False):
         fig_dca, ax_dca = plt.subplots(figsize=(12, 12))
@@ -543,7 +545,8 @@ def plot_roc_curve_cv(
         plt.tight_layout()
         if plt_show:
             plt.show()
-
+        plt.close(fig_dca)
+        
         return fig_dca, ax_dca
 
     mask = dca_thresholds <= 0.2
@@ -656,6 +659,7 @@ def plot_roc_curve_cv(
     plt.tight_layout()
     if plt_show:
         plt.show()
+    plt.close(fig_pcr_cost_annual)
 
     # ── Sensitivity vs PCR削減率 + 右軸: 全期間コスト削減額 ─────
     fig_pcr_cost_total, ax_pcr_cost_total = plt.subplots(figsize=(12, 12))
@@ -700,7 +704,8 @@ def plot_roc_curve_cv(
     plt.tight_layout()
     if plt_show:
         plt.show() 
-    
+    plt.close(fig_pcr_cost_total)
+
     # ── Clinical Impact Curve 集計 ───────────────────────────
     hr_mat      = np.array([f["high_risk_rate"] for f in fold_cic_curves])
     tp_rate_mat = np.array([f["tp_rate"]        for f in fold_cic_curves])
@@ -747,7 +752,8 @@ def plot_roc_curve_cv(
     plt.tight_layout()
     if plt_show:
         plt.show()
-
+    plt.close(fig_cic)
+    
     # ── NPV vs 検査削減率 集計 ────────────────────────────────
     npv_lower = 1 - prevalence
     common_npv = np.linspace(npv_lower, 1, 100)
@@ -800,6 +806,8 @@ def plot_roc_curve_cv(
     plt.tight_layout()
     if plt_show:
         plt.show()
+    plt.close(fig_npv)
+    
     # ── CV メトリクス集計 ────────────────────────────────────
     cv_metrics = {
         "accuracy_mean":    np.mean(accuracies),
@@ -853,6 +861,7 @@ def plot_roc_curve_cv(
     plt.tight_layout()
     if plt_show:
         plt.show()
+    plt.close(fig_table)
 
     # ── 全データ再学習 ───────────────────────────────────────
     smote_final  = _make_smote(smote_type, seed, X.columns, numerical_features, y)
@@ -877,7 +886,7 @@ def plot_roc_curve_cv(
     return final_model,cv_metrics, final_thr, all_y_true, all_y_proba, figures, tprs, aucs
 
 
-def plot_shap_summary(X, y, title, n_tree=1000, seed=42, model_type="rf", plot_label_dict=None):
+def plot_shap_summary(X, y, title, n_tree=1000, seed=42, model_type="rf", plot_label_dict=None, plt_show=True):
     import shap
 
     # =====================================
@@ -938,5 +947,8 @@ def plot_shap_summary(X, y, title, n_tree=1000, seed=42, model_type="rf", plot_l
     # 保存は関数外で行う
     plt.tight_layout()
     fig_shap = plt.gcf()   
-    plt.show() 
+    if plt_show:
+        plt.show()
+    plt.close(fig_shap)
+    
     return shap_values, fig_shap
