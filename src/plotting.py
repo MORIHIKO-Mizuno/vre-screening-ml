@@ -88,6 +88,15 @@ def _treat_all_net_benefit(y_true, thresholds):
     return np.array(nbs)
 
 
+def _finalize_figure(fig, plt_show):
+    try:
+        fig.tight_layout()
+        if plt_show:
+            plt.show()
+    finally:
+        plt.close(fig)
+
+
 def _smote_k_neighbors(y):
     if y is None:
         return 5
@@ -261,8 +270,15 @@ def plot_roc_curve_cv(
 
             # --- 最終threshold ---
             used_t = np.mean(inner_thresholds)
-        else:
+        elif threshold_method in ["0.5", 0.5, "fixed_0.5"]:
             used_t = 0.5
+        else:
+            raise ValueError(
+                "Unsupported threshold_method: "
+                f"{threshold_method}. Choose from "
+                "'youden_tr', 'youden_res', 'youden_va', 'f1', 'f2', "
+                "'inner_youden', 'inner_f1', 'inner_f2', or '0.5'."
+            )
 
         used_thresholds.append(used_t)
 
@@ -442,8 +458,6 @@ def plot_roc_curve_cv(
         ax.tick_params(labelsize=FONT_TICK)
 
     # ── ROC プロット ─────────────────────────────────────────
-    from matplotlib.lines import Line2D
-
     fig_roc, ax_roc = plt.subplots(figsize=(12, 12))
 
     ax_roc.fill_between(
@@ -471,10 +485,7 @@ def plot_roc_curve_cv(
         loc=(0.5, 0.02), frameon=False,
         prop={"weight": "normal", "size": FONT_LEGEND}
     )
-    plt.tight_layout()
-    if plt_show:
-        plt.show()
-    plt.close(fig_roc)
+    _finalize_figure(fig_roc, plt_show)
 
     # ── PR プロット ──────────────────────────────────────────
     fig_pr, ax_pr = plt.subplots(figsize=(12, 12))
@@ -503,10 +514,7 @@ def plot_roc_curve_cv(
         loc=(0.5, 0.7), frameon=False,
         prop={"weight": "normal", "size": FONT_LEGEND}
     )
-    plt.tight_layout()
-    if plt_show:
-        plt.show()
-    plt.close(fig_pr)
+    _finalize_figure(fig_pr, plt_show)
     
     # ── DCA プロット ─────────────────────────────────────────
     def _plot_dca(xlim=None, ylim=None, zoom=False):
@@ -542,16 +550,14 @@ def plot_roc_curve_cv(
             loc="upper right", frameon=False,
             prop={"weight": "normal", "size": FONT_LEGEND}
         )
-        plt.tight_layout()
-        if plt_show:
-            plt.show()
-        plt.close(fig_dca)
+        _finalize_figure(fig_dca, plt_show)
         
         return fig_dca, ax_dca
 
+    fig_dca, ax_dca = _plot_dca()
     mask = dca_thresholds <= 0.2
-    y_max_zoom = max(np.nanmax(mean_nb[mask]), np.nanmax(mean_nb_all[mask])) * 1.2
-    y_min_zoom = -np.nanmax(mean_nb_all[mask]) * 1.5
+    y_max_zoom = max(np.nanmax(mean_nb[mask] + std_nb[mask]), np.nanmax(mean_nb_all[mask])) * 1.2
+    y_min_zoom = min(0, np.nanmin(mean_nb[mask] - std_nb[mask]), np.nanmin(mean_nb_all[mask])) * 1.2
     fig_dca_zoom, ax_dca_zoom = _plot_dca(xlim=(0, 0.2), ylim=(y_min_zoom, y_max_zoom), zoom=True)
 
     # ── キャリブレーションプロット ───────────────────────────
@@ -581,9 +587,7 @@ def plot_roc_curve_cv(
         loc=(0.02, 0.7), frameon=False,
         prop={"weight": "normal", "size": FONT_LEGEND}
     )
-    plt.tight_layout()
-    if plt_show:
-        plt.show()
+    _finalize_figure(fig_calib, plt_show)
 
     # ── Sensitivity vs PCR削減率プロット ────────────────────
     fig_pcr, ax_pcr = plt.subplots(figsize=(12, 12))
@@ -612,9 +616,7 @@ def plot_roc_curve_cv(
     frameon=False,
     prop={"weight": "normal", "size": FONT_LEGEND}
     )
-    plt.tight_layout()
-    if plt_show:
-        plt.show()   
+    _finalize_figure(fig_pcr, plt_show)
     
     # ── Sensitivity vs PCR削減率 + 右軸: 年間コスト削減額 ─────
     fig_pcr_cost_annual, ax_pcr_cost_annual = plt.subplots(figsize=(12, 12))
@@ -656,10 +658,7 @@ def plot_roc_curve_cv(
         frameon=False,
         prop={"weight": "normal", "size": FONT_LEGEND}
     )
-    plt.tight_layout()
-    if plt_show:
-        plt.show()
-    plt.close(fig_pcr_cost_annual)
+    _finalize_figure(fig_pcr_cost_annual, plt_show)
 
     # ── Sensitivity vs PCR削減率 + 右軸: 全期間コスト削減額 ─────
     fig_pcr_cost_total, ax_pcr_cost_total = plt.subplots(figsize=(12, 12))
@@ -701,10 +700,7 @@ def plot_roc_curve_cv(
         frameon=False,
         prop={"weight": "normal", "size": FONT_LEGEND}
     )
-    plt.tight_layout()
-    if plt_show:
-        plt.show() 
-    plt.close(fig_pcr_cost_total)
+    _finalize_figure(fig_pcr_cost_total, plt_show)
 
     # ── Clinical Impact Curve 集計 ───────────────────────────
     hr_mat      = np.array([f["high_risk_rate"] for f in fold_cic_curves])
@@ -734,6 +730,7 @@ def plot_roc_curve_cv(
     )
     ax_cic.plot(dca_thresholds, mean_tp_rate, color="dimgray", lw=LW, ls="--")
 
+    ax_cic.set_xlabel("Threshold Probability", fontsize=FONT_LABEL)
     ax_cic.set_ylabel("Proportion of Patients", fontsize=FONT_LABEL)
     y_max = max(
     np.nanmax(mean_hr + std_hr),
@@ -749,10 +746,7 @@ def plot_roc_curve_cv(
         ],
         loc="upper right", frameon=False,
                 prop={"weight": "normal", "size": FONT_LEGEND})
-    plt.tight_layout()
-    if plt_show:
-        plt.show()
-    plt.close(fig_cic)
+    _finalize_figure(fig_cic, plt_show)
     
     # ── NPV vs 検査削減率 集計 ────────────────────────────────
     npv_lower = 1 - prevalence
@@ -803,10 +797,7 @@ def plot_roc_curve_cv(
         loc="upper left", frameon=False,
         prop={"weight": "normal", "size": FONT_LEGEND}
     )
-    plt.tight_layout()
-    if plt_show:
-        plt.show()
-    plt.close(fig_npv)
+    _finalize_figure(fig_npv, plt_show)
     
     # ── CV メトリクス集計 ────────────────────────────────────
     cv_metrics = {
@@ -858,10 +849,7 @@ def plot_roc_curve_cv(
     table.auto_set_font_size(False)
     table.set_fontsize(12)
     table.scale(1.5, 1.5)
-    plt.tight_layout()
-    if plt_show:
-        plt.show()
-    plt.close(fig_table)
+    _finalize_figure(fig_table, plt_show)
 
     # ── 全データ再学習 ───────────────────────────────────────
     smote_final  = _make_smote(smote_type, seed, X.columns, numerical_features, y)
@@ -873,6 +861,7 @@ def plot_roc_curve_cv(
     figures = {
         "roc":              fig_roc,
         "pr":               fig_pr,
+        "dca":              fig_dca,
         "dca_zoom":         fig_dca_zoom,
         "calib":            fig_calib,
         "pcr":              fig_pcr,
@@ -883,7 +872,7 @@ def plot_roc_curve_cv(
         "table":            fig_table,
     }
 
-    return final_model,cv_metrics, final_thr, all_y_true, all_y_proba, figures, tprs, aucs
+    return final_model, cv_metrics, final_thr, all_y_true, all_y_proba, figures, tprs, aucs
 
 
 def plot_shap_summary(X, y, title, n_tree=1000, seed=42, model_type="rf", plot_label_dict=None, plt_show=True):
@@ -945,10 +934,131 @@ def plot_shap_summary(X, y, title, n_tree=1000, seed=42, model_type="rf", plot_l
     ax.spines['bottom'].set_color('black')
 
     # 保存は関数外で行う
-    plt.tight_layout()
     fig_shap = plt.gcf()   
-    if plt_show:
-        plt.show()
-    plt.close(fig_shap)
+    _finalize_figure(fig_shap, plt_show)
     
     return shap_values, fig_shap
+
+
+def plot_model_roc_comparison(
+    results_dict,
+    colors=None,
+    labels=None,
+    alpha=0.7,
+    show_fold_curves=False,
+    plt_show=True
+):
+
+    FONT_LABEL  = 48
+    FONT_TICK   = 40
+    FONT_LEGEND = 23
+    LW          = 5
+
+    DEFAULT_COLORS = [
+        "#1B9E77",  # teal
+        "#D95F02",  # orange
+        "#7570B3",  # purple
+        "#E7298A",  # pink
+        "#66A61E",  # green
+        "#E6AB02",  # mustard
+        "#A6761D",  # brown
+        "#666666",  # gray
+    ]
+
+    mean_fpr = np.linspace(0, 1, 100)
+
+    fig, ax = plt.subplots(figsize=(12, 12))
+    legend_handles = []
+
+    color_palette = colors or DEFAULT_COLORS
+
+    color_map = {
+        model_type: color_palette[idx % len(color_palette)]
+        for idx, (model_type, _) in enumerate(results_dict.items())
+    }
+
+    # =========================
+    # ROC描画
+    # =========================
+    for model_type, res in results_dict.items():
+
+        color = color_map[model_type]
+        label_name = (labels or {}).get(model_type, model_type.upper())
+
+        tprs = np.array(res["tprs"])
+        aucs = np.array(res["aucs"])
+
+        mean_tpr = np.mean(tprs, axis=0)
+        mean_tpr[-1] = 1.0
+
+        mean_auc = np.mean(aucs)
+        std_auc = np.std(aucs)
+
+        # -------------------------
+        # 各foldを薄く表示（おすすめ）
+        # -------------------------
+        if show_fold_curves:
+            for tpr in tprs:
+                ax.plot(
+                    mean_fpr,
+                    tpr,
+                    color=color,
+                    lw=1.5,
+                    alpha=0.15
+                )
+
+        # -------------------------
+        # 平均ROC
+        # -------------------------
+        ax.plot(
+            mean_fpr,
+            mean_tpr,
+            color=color,
+            lw=LW,
+            alpha=alpha
+        )
+
+        legend_handles.append(
+            Line2D(
+                [0], [0],
+                color=color,
+                lw=LW,
+                alpha=alpha,
+                label=f"{label_name} ({mean_auc:.2f})"
+            )
+        )
+
+    # ランダム分類線
+    ax.plot(
+        [0, 1],
+        [0, 1],
+        linestyle="--",
+        lw=3,
+        color="black",
+        alpha=0.4
+    )
+
+    ax.set_xlim(-0.05, 1.05)
+    ax.set_ylim(-0.05, 1.05)
+    ax.set_aspect("equal")
+
+    ax.set_xlabel("False Positive Rate", fontsize=FONT_LABEL)
+    ax.set_ylabel("True Positive Rate", fontsize=FONT_LABEL)
+
+    ax.spines["right"].set_color("white")
+    ax.spines["top"].set_color("white")
+
+    ax.tick_params(labelsize=FONT_TICK)
+
+    ax.legend(
+        handles=legend_handles,
+        loc=(0.52, 0.02),
+        frameon=False,
+        prop={"size": FONT_LEGEND},
+    )
+
+    plt.rcParams["font.family"] = "Arial"
+
+    _finalize_figure(fig, plt_show)
+
+    return fig
