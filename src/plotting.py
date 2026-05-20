@@ -517,6 +517,66 @@ def plot_roc_curve_cv(
     _finalize_figure(fig_pr, plt_show)
     
     # ── DCA プロット ─────────────────────────────────────────
+    def _get_effective_threshold_ranges(
+        thresholds,
+        mean_nb,
+        mean_nb_all,
+        nb_none,
+        min_net_benefit=0
+    ):
+        thresholds = np.asarray(thresholds)
+        mean_nb = np.asarray(mean_nb)
+        mean_nb_all = np.asarray(mean_nb_all)
+        nb_none = np.asarray(nb_none)
+
+        # Treat-all と Treat-none の両方より有用
+        mask_both = (
+            (mean_nb > mean_nb_all) &
+            (mean_nb > nb_none) &
+            (mean_nb > min_net_benefit)
+        )
+
+        def _range_from_mask(mask):
+            if not np.any(mask):
+                return None
+
+            thres = thresholds[mask]
+            return thres.min(), thres.max()
+
+        return _range_from_mask(mask_both)
+        
+    def _auto_dca_xlim_ylim(
+        thresholds,
+        mean_nb,
+        std_nb,
+        margin_x=0.02,
+        neg_ratio=0.20,
+        top_pad=1.10,
+        min_xmax=0.05
+    ):
+        thresholds = np.asarray(thresholds)
+        mean_nb = np.asarray(mean_nb)
+        std_nb = np.asarray(std_nb)
+
+        positive_mask = mean_nb > 0
+
+        if np.any(positive_mask):
+            x_max = thresholds[positive_mask].max() + margin_x
+        else:
+            x_max = min_xmax
+
+        x_max = max(x_max, min_xmax)
+        x_max = min(x_max, thresholds.max())
+
+        mask = thresholds <= x_max
+
+        y_top = np.nanmax(mean_nb[mask] + std_nb[mask]) * top_pad
+
+        # 0線が下から neg_ratio の位置になるようにする
+        y_bottom = - y_top * neg_ratio / (1 - neg_ratio)
+
+        return (0, x_max), (y_bottom, y_top)
+    
     def _plot_dca(xlim=None, ylim=None, zoom=False):
         fig_dca, ax_dca = plt.subplots(figsize=(12, 12))
 
@@ -555,10 +615,25 @@ def plot_roc_curve_cv(
         return fig_dca, ax_dca
 
     fig_dca, ax_dca = _plot_dca()
-    mask = dca_thresholds <= 0.2
-    y_max_zoom = max(np.nanmax(mean_nb[mask] + std_nb[mask]), np.nanmax(mean_nb_all[mask])) * 1.2
-    y_min_zoom = min(0, np.nanmin(mean_nb[mask] - std_nb[mask]), np.nanmin(mean_nb_all[mask])) * 1.2
-    fig_dca_zoom, ax_dca_zoom = _plot_dca(xlim=(0, 0.2), ylim=(y_min_zoom, y_max_zoom), zoom=True)
+
+    xlim_auto, ylim_auto = _auto_dca_xlim_ylim(
+        dca_thresholds,
+        mean_nb,
+        std_nb,
+        margin_x=0.03,
+        neg_ratio=0.34,
+        top_pad=1.10,
+        min_xmax=0.05
+    )
+
+    fig_dca_zoom, ax_dca_zoom = _plot_dca(
+        xlim=xlim_auto,
+        ylim=ylim_auto,
+        zoom=True
+    )
+    
+    effective_range = _get_effective_threshold_ranges(dca_thresholds, mean_nb, mean_nb_all, nb_none)
+    print(f"Effective threshold range: {effective_range}")
 
     # ── キャリブレーションプロット ───────────────────────────
     fig_calib, ax_calib = plt.subplots(figsize=(12, 12))
@@ -618,89 +693,89 @@ def plot_roc_curve_cv(
     )
     _finalize_figure(fig_pcr, plt_show)
     
-    # ── Sensitivity vs PCR削減率 + 右軸: 年間コスト削減額 ─────
-    fig_pcr_cost_annual, ax_pcr_cost_annual = plt.subplots(figsize=(12, 12))
+    # ── Sensitivity = 0.90 専用プロット ─────────────────────
+    target_sens = 0.90
 
-    ax_pcr_cost_annual.fill_between(
+    target_idx = np.argmin(np.abs(common_sens - target_sens))
+    target_pcr = mean_pcr[target_idx]
+
+    fig_pcr_target, ax_pcr_target = plt.subplots(figsize=(12, 12))
+
+    # 元の曲線
+    ax_pcr_target.fill_between(
         common_sens,
         np.maximum(mean_pcr - std_pcr, 0),
         np.minimum(mean_pcr + std_pcr, 1),
-        color="black", alpha=0.15
+        color="black",
+        alpha=0.15
     )
-    ax_pcr_cost_annual.plot(common_sens, mean_pcr, color="black", lw=LW)
 
-    ax_pcr_cost_annual.set_xlim(-0.05, 1.05)
-    ax_pcr_cost_annual.set_ylim(-0.05, 1.05)
-    ax_pcr_cost_annual.set_aspect("equal")
-    ax_pcr_cost_annual.set_title("", weight="bold", fontsize=FONT_TITLE)
-    ax_pcr_cost_annual.set_xlabel("Sensitivity", fontsize=FONT_LABEL)
-    ax_pcr_cost_annual.set_ylabel("PCR Reduction Rate", fontsize=FONT_LABEL)
-    _apply_style(ax_pcr_cost_annual)
+    ax_pcr_target.plot(
+        common_sens,
+        mean_pcr,
+        color="black",
+        lw=LW
+    )
 
-    # 右軸（1年換算）
-    ax_pcr_cost_annual_r = ax_pcr_cost_annual.twinx()
-    y0, y1 = ax_pcr_cost_annual.get_ylim()
-    annual_cost_y0 = y0 * len(y) * pcr_unit_cost * annual_factor
-    annual_cost_y1 = y1 * len(y) * pcr_unit_cost * annual_factor
-    ax_pcr_cost_annual_r.set_ylim(annual_cost_y0, annual_cost_y1)
-    ax_pcr_cost_annual_r.set_ylabel(
-        "Estimated Cost Savings (JPY)",
+    # 縦線
+    ax_pcr_target.axvline(
+        target_sens,
+        color="red",
+        linestyle="--",
+        lw=LW,
+        alpha=0.45,
+    )
+
+    # 点
+    ax_pcr_target.scatter(
+        target_sens,
+        target_pcr,
+        color="red",
+        s=250,
+        zorder=10,
+        # alpha=0.9,
+    )
+
+    # テキスト
+    ax_pcr_target.text(
+        target_sens - 0.02,
+        target_pcr - 0.02,
+        f"({target_sens:.2f}, {target_pcr:.2f})",
+        color="red",
+        fontsize=FONT_LEGEND,
+        va="top",
+        ha="right",
+    )
+
+    ax_pcr_target.set_xlim(-0.05, 1.05)
+    ax_pcr_target.set_ylim(-0.05, 1.05)
+    ax_pcr_target.set_aspect("equal")
+
+    ax_pcr_target.set_xlabel(
+        "Sensitivity",
         fontsize=FONT_LABEL
     )
-    ax_pcr_cost_annual_r.tick_params(labelsize=FONT_TICK)
 
-    ax_pcr_cost_annual.legend(
+    ax_pcr_target.set_ylabel(
+        "PCR Reduction Rate",
+        fontsize=FONT_LABEL
+    )
+
+    _apply_style(ax_pcr_target)
+
+    ax_pcr_target.legend(
         handles=[
             Line2D([0], [0], color="black", lw=LW, label="Mean"),
             Patch(facecolor="black", alpha=0.15, label="±1 std. dev."),
         ],
-        loc="upper right",
+        loc="lower left",
         frameon=False,
         prop={"weight": "normal", "size": FONT_LEGEND}
     )
-    _finalize_figure(fig_pcr_cost_annual, plt_show)
 
-    # ── Sensitivity vs PCR削減率 + 右軸: 全期間コスト削減額 ─────
-    fig_pcr_cost_total, ax_pcr_cost_total = plt.subplots(figsize=(12, 12))
-
-    ax_pcr_cost_total.fill_between(
-        common_sens,
-        np.maximum(mean_pcr - std_pcr, 0),
-        np.minimum(mean_pcr + std_pcr, 1),
-        color="black", alpha=0.15
-    )
-    ax_pcr_cost_total.plot(common_sens, mean_pcr, color="black", lw=LW)
-
-    ax_pcr_cost_total.set_xlim(-0.05, 1.05)
-    ax_pcr_cost_total.set_ylim(-0.05, 1.05)
-    ax_pcr_cost_total.set_aspect("equal")
-    ax_pcr_cost_total.set_title("", weight="bold", fontsize=FONT_TITLE)
-    ax_pcr_cost_total.set_xlabel("Sensitivity", fontsize=FONT_LABEL)
-    ax_pcr_cost_total.set_ylabel("PCR Reduction Rate", fontsize=FONT_LABEL)
-    _apply_style(ax_pcr_cost_total)
-
-    # 右軸（全期間）
-    ax_pcr_cost_total_r = ax_pcr_cost_total.twinx()
-    y0, y1 = ax_pcr_cost_total.get_ylim()
-    total_cost_y0 = y0 * len(y) * pcr_unit_cost
-    total_cost_y1 = y1 * len(y) * pcr_unit_cost
-    ax_pcr_cost_total_r.set_ylim(total_cost_y0, total_cost_y1)
-    ax_pcr_cost_total_r.set_ylabel(
-        "Estimated Cost Savings (JPY)",
-        fontsize=FONT_LABEL
-    )
-    ax_pcr_cost_total_r.tick_params(labelsize=FONT_TICK)
-
-    ax_pcr_cost_total.legend(
-        handles=[
-            Line2D([0], [0], color="black", lw=LW, label="Mean"),
-            Patch(facecolor="black", alpha=0.15, label="±1 std. dev."),
-        ],
-        loc="upper right",
-        frameon=False,
-        prop={"weight": "normal", "size": FONT_LEGEND}
-    )
-    _finalize_figure(fig_pcr_cost_total, plt_show)
+    _finalize_figure(fig_pcr_target, plt_show)
+    print(f"Sensitivity        : {target_sens:.2f}")
+    print(f"PCR reduction rate : {target_pcr:.3f}")
 
     # ── Clinical Impact Curve 集計 ───────────────────────────
     hr_mat      = np.array([f["high_risk_rate"] for f in fold_cic_curves])
@@ -865,8 +940,7 @@ def plot_roc_curve_cv(
         "dca_zoom":         fig_dca_zoom,
         "calib":            fig_calib,
         "pcr":              fig_pcr,
-        "pcr_cost_annual":  fig_pcr_cost_annual,
-        "pcr_cost_total":   fig_pcr_cost_total,
+        "pcr_target":       fig_pcr_target,
         "cic":              fig_cic,
         "npv":              fig_npv,
         "table":            fig_table,
