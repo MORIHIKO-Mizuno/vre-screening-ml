@@ -777,6 +777,273 @@ def plot_roc_curve_cv(
     print(f"Sensitivity        : {target_sens:.2f}")
     print(f"PCR reduction rate : {target_pcr:.3f}")
 
+# thresholdごとの fold平均 sensitivity / PCR reduction を計算
+    sens_mat_th = []
+    pcr_mat_th = []
+
+    for fold in fold_pcr_curves:
+        s = fold["sensitivity"]
+        pcr = fold["pcr_reduction"]
+
+        sens_mat_th.append(s)
+        pcr_mat_th.append(pcr)
+
+    sens_mat_th = np.array(sens_mat_th)
+    pcr_mat_th = np.array(pcr_mat_th)
+
+    mean_sens_by_th = np.nanmean(sens_mat_th, axis=0)
+    std_sens_by_th  = np.nanstd(sens_mat_th, axis=0)
+
+    mean_pcr_by_th = np.nanmean(pcr_mat_th, axis=0)
+    std_pcr_by_th  = np.nanstd(pcr_mat_th, axis=0)
+
+    # 平均 sensitivity が 0.90 に最も近い threshold を採用
+    target_idx_th = np.nanargmin(np.abs(mean_sens_by_th - target_sens))
+
+    selected_threshold = scan_thresholds[target_idx_th]
+    selected_sens_mean = mean_sens_by_th[target_idx_th]
+    selected_sens_std  = std_sens_by_th[target_idx_th]
+    selected_pcr_mean  = mean_pcr_by_th[target_idx_th]
+    selected_pcr_std   = std_pcr_by_th[target_idx_th]
+
+    print(f"Target sensitivity      : {target_sens:.2f}")
+    print(f"Selected threshold      : {selected_threshold:.6f}")
+    print(f"Mean sensitivity        : {selected_sens_mean:.3f} ± {selected_sens_std:.3f}")
+    print(f"Mean PCR reduction rate : {selected_pcr_mean:.3f} ± {selected_pcr_std:.3f}")
+    
+    # ── Threshold vs Sensitivity プロット ────────────────────
+
+    sens_mat_th = []
+
+    for fold in fold_pcr_curves:
+        sens_mat_th.append(fold["sensitivity"])
+
+    sens_mat_th = np.array(sens_mat_th)
+
+    mean_sens_by_th = np.nanmean(sens_mat_th, axis=0)
+    std_sens_by_th  = np.nanstd(sens_mat_th, axis=0)
+
+    fig_th, ax_th = plt.subplots(figsize=(12, 12))
+
+    ax_th.fill_between(
+        scan_thresholds,
+        np.maximum(mean_sens_by_th - std_sens_by_th, 0),
+        np.minimum(mean_sens_by_th + std_sens_by_th, 1),
+        color="black",
+        alpha=0.15
+    )
+
+    ax_th.plot(
+        scan_thresholds,
+        mean_sens_by_th,
+        color="black",
+        lw=LW
+    )
+
+    # Sensitivity = 0.90 の位置
+    target_sens = 0.90
+
+    target_idx = np.argmin(
+        np.abs(mean_sens_by_th - target_sens)
+    )
+
+    selected_threshold = scan_thresholds[target_idx]
+
+    ax_th.axhline(
+        target_sens,
+        color="red",
+        linestyle="--",
+        lw=LW,
+        alpha=0.45,
+    )
+
+    ax_th.scatter(
+        selected_threshold,
+        mean_sens_by_th[target_idx],
+        color="red",
+        s=250,
+        zorder=10,
+    )
+
+    ax_th.text(
+        selected_threshold,
+        mean_sens_by_th[target_idx] - 0.03,
+        f"({selected_threshold:.4f}, {mean_sens_by_th[target_idx]:.2f})",
+        color="red",
+        fontsize=FONT_LEGEND,
+        ha="center",
+        va="top",
+    )
+
+    ax_th.set_xlim(
+        scan_thresholds.min(),
+        scan_thresholds.max()
+    )
+
+    ax_th.set_ylim(-0.05, 1.05)
+
+    ax_th.set_title(
+        "",
+        weight="bold",
+        fontsize=FONT_TITLE
+    )
+
+    ax_th.set_xlabel(
+        "Probability Threshold",
+        fontsize=FONT_LABEL
+    )
+
+    ax_th.set_ylabel(
+        "Sensitivity",
+        fontsize=FONT_LABEL
+    )
+
+    _apply_style(ax_th)
+
+    ax_th.legend(
+        handles=[
+            Line2D([0], [0], color="black", lw=LW, label="Mean"),
+            Patch(facecolor="black", alpha=0.15, label="±1 std. dev."),
+        ],
+        loc="upper right",
+        frameon=False,
+        prop={"weight": "normal", "size": FONT_LEGEND}
+    )
+
+    _finalize_figure(fig_th, plt_show)
+
+    print(f"Threshold at sensitivity≈0.90 : {selected_threshold:.6f}")
+    print(f"Mean sensitivity              : {mean_sens_by_th[target_idx]:.3f}")
+    
+    # zoom版
+    fig_th_zoom, ax_th_zoom = plt.subplots(figsize=(12, 12))
+    ax_th_zoom.fill_between(
+        scan_thresholds,
+        np.maximum(mean_sens_by_th - std_sens_by_th, 0),
+        np.minimum(mean_sens_by_th + std_sens_by_th, 1),
+        color="black",
+        alpha=0.15
+    )
+    ax_th_zoom.plot(
+        scan_thresholds,
+        mean_sens_by_th,
+        color="black",
+        lw=LW
+    )
+    ax_th_zoom.set_xlim(0, 0.02)
+    ax_th_zoom.set_ylim(-0.05, 1.05)
+    
+    ax_th_zoom.set_xlabel(
+        "Probability Threshold",
+        fontsize=FONT_LABEL
+    )
+    ax_th_zoom.set_ylabel(
+        "Sensitivity",
+        fontsize=FONT_LABEL
+    )
+    _apply_style(ax_th_zoom)
+    _finalize_figure(fig_th_zoom, plt_show)
+
+    # ── Threshold vs PCR削減率プロット ────────────────────
+    pcr_mat_th = []
+
+    for fold in fold_pcr_curves:
+        pcr_mat_th.append(fold["pcr_reduction"])
+
+    pcr_mat_th = np.array(pcr_mat_th)
+
+    mean_pcr_by_th = np.nanmean(pcr_mat_th, axis=0)
+    std_pcr_by_th  = np.nanstd(pcr_mat_th, axis=0)
+
+    fig_th_pcr, ax_th_pcr = plt.subplots(figsize=(12, 12))
+
+    ax_th_pcr.fill_between(
+        scan_thresholds,
+        np.maximum(mean_pcr_by_th - std_pcr_by_th, 0),
+        np.minimum(mean_pcr_by_th + std_pcr_by_th, 1),
+        color="black",
+        alpha=0.15
+    )
+
+    ax_th_pcr.plot(
+        scan_thresholds,
+        mean_pcr_by_th,
+        color="black",
+        lw=LW
+    )
+
+    ax_th_pcr.set_xlim(
+        scan_thresholds.min(),
+        scan_thresholds.max()
+    )
+
+    ax_th_pcr.set_ylim(-0.05, 1.05)
+
+    ax_th_pcr.set_title(
+        "",
+        weight="bold",
+        fontsize=FONT_TITLE
+    )
+
+    ax_th_pcr.set_xlabel(
+        "Probability Threshold",
+        fontsize=FONT_LABEL
+    )
+
+    ax_th_pcr.set_ylabel(
+        "PCR Reduction Rate",
+        fontsize=FONT_LABEL
+    )
+
+    _apply_style(ax_th_pcr)
+
+    ax_th_pcr.legend(
+        handles=[
+            Line2D([0], [0], color="black", lw=LW, label="Mean"),
+            Patch(facecolor="black", alpha=0.15, label="±1 std. dev."),
+        ],
+        loc="upper left",
+        frameon=False,
+        prop={"weight": "normal", "size": FONT_LEGEND}
+    )
+
+    _finalize_figure(fig_th_pcr, plt_show)
+    
+    # ズーム版
+    fig_th_pcr_zoom, ax_th_pcr_zoom = plt.subplots(figsize=(12, 12))
+
+    ax_th_pcr_zoom.fill_between(
+        scan_thresholds,
+        np.maximum(mean_pcr_by_th - std_pcr_by_th, 0),
+        np.minimum(mean_pcr_by_th + std_pcr_by_th, 1),
+        color="black",
+        alpha=0.15
+    )
+
+    ax_th_pcr_zoom.plot(
+        scan_thresholds,
+        mean_pcr_by_th,
+        color="black",
+        lw=LW
+    )
+
+    ax_th_pcr_zoom.set_xlim(0, 0.02)
+    ax_th_pcr_zoom.set_ylim(-0.05, 1.05)
+
+    ax_th_pcr_zoom.set_xlabel(
+        "Probability Threshold",
+        fontsize=FONT_LABEL
+    )
+
+    ax_th_pcr_zoom.set_ylabel(
+        "PCR Reduction Rate",
+        fontsize=FONT_LABEL
+    )
+
+    _apply_style(ax_th_pcr_zoom)
+
+    _finalize_figure(fig_th_pcr_zoom, plt_show)
+    
     # ── Clinical Impact Curve 集計 ───────────────────────────
     hr_mat      = np.array([f["high_risk_rate"] for f in fold_cic_curves])
     tp_rate_mat = np.array([f["tp_rate"]        for f in fold_cic_curves])
