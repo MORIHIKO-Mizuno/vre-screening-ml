@@ -777,7 +777,43 @@ def plot_roc_curve_cv(
     print(f"Sensitivity        : {target_sens:.2f}")
     print(f"PCR reduction rate : {target_pcr:.3f}")
 
-# thresholdごとの fold平均 sensitivity / PCR reduction を計算
+    # Sensitivity = 0.90 を満たす点の閾値、PCR削減率、実際の感度をフォールドごとに抽出して集計
+    print("\nSensitivity = 0.90 を満たす点のフォールドごとの閾値、PCR削減率、実際の感度:")
+    target_thresholds = []
+    target_pcrs = []
+    target_sens_actual = []
+
+    for fold in fold_pcr_curves:
+        s   = fold["sensitivity"]
+        pcr = fold["pcr_reduction"]
+        th  = scan_thresholds
+
+        valid = ~np.isnan(s)
+        s_valid   = s[valid]
+        pcr_valid = pcr[valid]
+        th_valid  = th[valid]
+
+        # 感度≥0.90を満たす点のみ抽出
+        ok = s_valid >= target_sens
+        if not np.any(ok):
+            print("このフォールドでは感度0.90を達成できませんでした")
+            continue
+
+        # その中で最大閾値（感度がギリギリ0.90の点）
+        idx = np.argmax(th_valid[ok])
+
+        target_thresholds.append(th_valid[ok][idx])
+        target_pcrs.append(pcr_valid[ok][idx])
+        target_sens_actual.append(s_valid[ok][idx])
+
+    print(f"n folds used  : {len(target_thresholds)}")
+    print(f"fold thresholds: {[f'{t:.4f}' for t in target_thresholds]}")
+    print(f"Threshold     : {np.mean(target_thresholds):.4f} ± {np.std(target_thresholds):.4f}")
+    print(f"Sensitivity   : {np.mean(target_sens_actual):.3f} ± {np.std(target_sens_actual):.3f}")
+    print(f"PCR reduction : {np.mean(target_pcrs):.3f} ± {np.std(target_pcrs):.3f}")
+
+    # thresholdごとの fold平均 sensitivity / PCR reduction を計算
+    print("\nThresholdごとの fold平均 sensitivity / PCR reduction:")
     sens_mat_th = []
     pcr_mat_th = []
 
