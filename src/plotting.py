@@ -47,6 +47,9 @@ from imblearn.over_sampling import SMOTE, SMOTENC, SMOTEN, ADASYN
 # --- UMAP ---
 from umap import UMAP
 
+# --- Shap ---
+import shap
+
 try:
     from .models import make_model
 except ImportError:
@@ -231,7 +234,7 @@ def plot_roc_curve_cv(
             
         elif threshold_method in ["inner_youden", "inner_f1", "inner_f2"]:
 
-            skf_inner = StratifiedKFold(n_splits=3, shuffle=True, random_state=seed)
+            skf_inner = StratifiedKFold(n_splits=5, shuffle=True, random_state=seed)
             inner_thresholds = []
 
             for tr_idx, va_idx in skf_inner.split(X_tr, y_tr):
@@ -239,8 +242,10 @@ def plot_roc_curve_cv(
                 y_tr_in, y_va_in = y_tr.iloc[tr_idx], y_tr.iloc[va_idx]
 
                 # --- モデル再学習（重要：clone） ---
-                model_inner = clone(model)
-                model_inner.fit(X_tr_in, y_tr_in)
+                smote_inner = _make_smote(smote_type, seed, X_tr.columns, numerical_features, y_tr_in)
+                X_tr_in_res, y_tr_in_res = smote_inner.fit_resample(X_tr_in, y_tr_in)
+                model_inner = clone(model_base)
+                model_inner.fit(X_tr_in_res, y_tr_in_res)
 
                 proba_va_in = model_inner.predict_proba(X_va_in)[:, 1]
 
@@ -679,7 +684,7 @@ def plot_roc_curve_cv(
     ax_pcr.set_aspect("equal")
     ax_pcr.set_title("", weight="bold", fontsize=FONT_TITLE)
     ax_pcr.set_xlabel("Sensitivity",             fontsize=FONT_LABEL)
-    ax_pcr.set_ylabel("PCR Reduction Rate", fontsize=FONT_LABEL)
+    ax_pcr.set_ylabel("ASC reduction Rate", fontsize=FONT_LABEL)
     _apply_style(ax_pcr)
     
     ax_pcr.legend(
@@ -757,7 +762,7 @@ def plot_roc_curve_cv(
     )
 
     ax_pcr_target.set_ylabel(
-        "PCR Reduction Rate",
+        "ASC reduction Rate",
         fontsize=FONT_LABEL
     )
 
@@ -775,7 +780,7 @@ def plot_roc_curve_cv(
 
     _finalize_figure(fig_pcr_target, plt_show)
     print(f"Sensitivity        : {target_sens:.2f}")
-    print(f"PCR reduction rate : {target_pcr:.3f}")
+    print(f"ASC reduction rate : {target_pcr:.3f}")
 
     # Sensitivity = 0.90 を満たす点の閾値、PCR削減率、実際の感度をフォールドごとに抽出して集計
     print("\nSensitivity = 0.90 を満たす点のフォールドごとの閾値、PCR削減率、実際の感度:")
@@ -810,10 +815,10 @@ def plot_roc_curve_cv(
     print(f"fold thresholds: {[f'{t:.4f}' for t in target_thresholds]}")
     print(f"Threshold     : {np.mean(target_thresholds):.4f} ± {np.std(target_thresholds):.4f}")
     print(f"Sensitivity   : {np.mean(target_sens_actual):.3f} ± {np.std(target_sens_actual):.3f}")
-    print(f"PCR reduction : {np.mean(target_pcrs):.3f} ± {np.std(target_pcrs):.3f}")
+    print(f"ASC reduction : {np.mean(target_pcrs):.3f} ± {np.std(target_pcrs):.3f}")
 
-    # thresholdごとの fold平均 sensitivity / PCR reduction を計算
-    print("\nThresholdごとの fold平均 sensitivity / PCR reduction:")
+    # thresholdごとの fold平均 sensitivity / ASC reduction を計算
+    print("\nThresholdごとの fold平均 sensitivity / ASC reduction:")
     sens_mat_th = []
     pcr_mat_th = []
 
@@ -845,7 +850,7 @@ def plot_roc_curve_cv(
     print(f"Target sensitivity      : {target_sens:.2f}")
     print(f"Selected threshold      : {selected_threshold:.6f}")
     print(f"Mean sensitivity        : {selected_sens_mean:.3f} ± {selected_sens_std:.3f}")
-    print(f"Mean PCR reduction rate : {selected_pcr_mean:.3f} ± {selected_pcr_std:.3f}")
+    print(f"Mean ASC reduction rate : {selected_pcr_mean:.3f} ± {selected_pcr_std:.3f}")
     
     # ── Threshold vs Sensitivity プロット ────────────────────
 
@@ -1027,7 +1032,7 @@ def plot_roc_curve_cv(
     )
 
     ax_th_pcr.set_ylabel(
-        "PCR Reduction Rate",
+        "ASC reduction Rate",
         fontsize=FONT_LABEL
     )
 
@@ -1072,7 +1077,7 @@ def plot_roc_curve_cv(
     )
 
     ax_th_pcr_zoom.set_ylabel(
-        "PCR Reduction Rate",
+        "ASC reduction Rate",
         fontsize=FONT_LABEL
     )
 
@@ -1253,7 +1258,6 @@ def plot_roc_curve_cv(
 
 
 def plot_shap_summary(X, y, title, n_tree=1000, seed=42, model_type="rf", plot_label_dict=None, plt_show=True):
-    import shap
 
     # =====================================
     # 初期設定

@@ -26,7 +26,8 @@ def make_model(model_type, n_tree=1000, seed=42):
         return LGBMClassifier(
             n_estimators=n_tree,
             random_state=seed,
-            class_weight="balanced"
+            is_unbalance=True,   # class_weight="balanced"より確実
+            verbose=-1,          # 警告抑制        
         )
 
     elif model_type == "cb":
